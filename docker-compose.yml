@@ -1,0 +1,68 @@
+version: '2'
+services:
+  zookeeper:
+    image: quay.io/debezium/zookeeper:1.8
+    ports:
+     - 2181:2181
+     - 2888:2888
+     - 3888:3888
+  kafka:
+    image: quay.io/debezium/kafka:1.8
+    ports:
+     - 9092:9092
+    links:
+     - zookeeper
+    environment:
+     - ZOOKEEPER_CONNECT=zookeeper:2181
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    command: /bin/bash ./entrypoint.sh
+    ports:
+     - 1433:1433
+    environment:
+     - ACCEPT_EULA=Y
+     - MSSQL_PID=Standard
+     - SA_PASSWORD=Password!
+     - MSSQL_AGENT_ENABLED=true
+    volumes:
+      - dbdata:/var/opt/mssql/data
+      - ./db/mssql/docker-entrypoint.sh:/entrypoint.sh
+      - ./db/mssql/docker-db-init.sh:/db-init.sh
+      - ./db/mssql/mssql-cars.sql:/db-init.sql
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8081:8080
+    links:
+     - sqlserver
+    environment:
+      - ADM_INSTALL_MSSQL=true
+      - PHP_FPM_INSTALL_MSSQL=true
+      - WORKSPACE_INSTALL_MSSQL=true
+  connect:
+    image: quay.io/debezium/connect:1.8
+    ports:
+     - 8083:8083
+    links:
+     - kafka
+     - sqlserver
+    environment:
+     - BOOTSTRAP_SERVERS=kafka:9092
+     - GROUP_ID=1
+     - CONFIG_STORAGE_TOPIC=my_connect_configs
+     - OFFSET_STORAGE_TOPIC=my_connect_offsets
+     - STATUS_STORAGE_TOPIC=my_connect_statuses
+
+volumes:
+  dbdata:
